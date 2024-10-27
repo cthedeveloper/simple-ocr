@@ -3,19 +3,7 @@ import { createWorker } from "tesseract.js";
 import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
-import { Document, Page, Text, PDFDownloadLink } from '@react-pdf/renderer';
 import { Spin } from 'antd'; // Import Ant Design spinner
-
-// PDF Document component
-const MyDocument = ({ textLines }: { textLines: string[] }) => (
-  <Document>
-    <Page size="A4">
-      <Text style={{ fontSize: 12 }}>
-        {textLines.join('\n')}
-      </Text>
-    </Page>
-  </Document>
-);
 
 export default function Home() {
   const [image, setImage] = useState<string | null>(null);
@@ -91,16 +79,6 @@ export default function Home() {
           <button onClick={exportToExcel} className="bg-[#00796B] text-white p-2 rounded hover:bg-[#00695C] transition duration-200">Export to Excel</button>
           <button onClick={exportToPDF} className="bg-[#00796B] text-white p-2 rounded hover:bg-[#00695C] transition duration-200">Export to PDF</button>
           <button onClick={exportToWord} className="bg-[#00796B] text-white p-2 rounded hover:bg-[#00695C] transition duration-200">Export to Word</button>
-          
-          <PDFDownloadLink
-            document={<MyDocument textLines={textLines} />}
-            fileName="preview.pdf"
-            className="bg-[#00796B] text-white p-2 rounded hover:bg-[#00695C] transition duration-200"
-          >
-            {({ loading }) =>
-              loading ? 'Preparing document...' : 'Preview PDF'
-            }
-          </PDFDownloadLink>
         </div>
       </div>
     </main>
