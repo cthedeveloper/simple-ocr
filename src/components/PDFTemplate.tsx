@@ -1,4 +1,3 @@
-import React from "react";
 import {
   validateTextWithNLP,
   detectLanguage,
@@ -39,6 +38,17 @@ const PDFTemplate: React.FC<PDFTemplateProps> = ({ text = "", title }) => {
 
   // Validate text using NLP functions
   const isValidText = validateTextWithNLP(lines);
+
+  if (!isValidText) {
+    return (
+      <div className="p-4 bg-white rounded shadow-md text-red-600">
+        <h4 className="font-semibold">{title}</h4>
+        <p className="mt-4">
+          The text is not valid according to NLP validation.
+        </p>
+      </div>
+    );
+  }
   const language = detectLanguage(lines);
   const isRedundant = checkRedundancy(lines);
   const readabilityScore = calculateReadability(lines);
@@ -49,8 +59,8 @@ const PDFTemplate: React.FC<PDFTemplateProps> = ({ text = "", title }) => {
       <h4 className="font-semibold mb-4">{title}</h4>
       <div className="text-sm text-gray-700 leading-relaxed">
         {/* Render the lines */}
-        {lines.map((line, index) => (
-          <p key={index} className="mt-2">
+        {lines.map((line) => (
+          <p key={line} className="mt-2">
             {line}
           </p>
         ))}
@@ -71,8 +81,8 @@ const PDFTemplate: React.FC<PDFTemplateProps> = ({ text = "", title }) => {
         <div className="mt-4">
           <h5 className="font-semibold text-[#00796B]">Suggestions</h5>
           <ul className="list-disc pl-6 text-sm text-gray-700">
-            {improvementSuggestions.map((suggestion, index) => (
-              <li key={index}>{suggestion}</li>
+            {improvementSuggestions.map((suggestion) => (
+              <li key={suggestion}>{suggestion}</li>
             ))}
           </ul>
         </div>

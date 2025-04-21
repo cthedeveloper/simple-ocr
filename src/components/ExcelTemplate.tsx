@@ -1,4 +1,3 @@
-import React from "react";
 import {
   validateTextWithNLP,
   detectLanguage,
@@ -24,6 +23,7 @@ const ExcelTemplate: React.FC<ExcelTemplateProps> = ({ data, title }) => {
 
   // NLP Validation
   const isValidText = validateTextWithNLP(flattenedData);
+  console.log("Is valid text:", isValidText); // Log or use the value meaningfully
   const language = detectLanguage(flattenedData);
   const isRedundant = checkRedundancy(flattenedData);
   const readabilityScore = calculateReadability(flattenedData);
@@ -38,7 +38,7 @@ const ExcelTemplate: React.FC<ExcelTemplateProps> = ({ data, title }) => {
             <tr>
               {processedData[0]?.map((_, colIndex) => (
                 <th
-                  key={colIndex}
+                  key={`col-${processedData[0]?.[colIndex] || colIndex}`}
                   className="border border-gray-300 px-2 py-1 bg-[#E0F7FA] text-[#00796B] font-semibold"
                 >
                   Column {colIndex + 1}
@@ -48,10 +48,10 @@ const ExcelTemplate: React.FC<ExcelTemplateProps> = ({ data, title }) => {
           </thead>
           <tbody>
             {processedData.map((row, rowIndex) => (
-              <tr key={rowIndex}>
+              <tr key={row.join("-") || rowIndex}>
                 {row.map((cell, colIndex) => (
                   <td
-                    key={colIndex}
+                    key={`${rowIndex}-${colIndex}-${cell}`}
                     className="border border-gray-300 px-2 py-1 text-sm text-gray-700"
                   >
                     {cell}

@@ -1,14 +1,20 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { createWorker } from "tesseract.js";
 import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
-import { Spin, Select, notification } from "antd";
+import { notification, Dropdown, Menu, Switch, Spin } from "antd";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  DownloadOutlined,
+  FileExcelOutlined,
+  FilePdfOutlined,
+  FileWordOutlined,
+} from "@ant-design/icons";
+
 import { ExcelTemplate1, ExcelTemplate2 } from "../components/ExcelTemplate";
 import { PDFTemplate1, PDFTemplate2 } from "../components/PDFTemplate";
 import { WordTemplate1, WordTemplate2 } from "../components/WordTemplate";
-
-const { Option } = Select;
 
 const Home = () => {
   const [image, setImage] = useState<string | null>(null);
@@ -17,105 +23,93 @@ const Home = () => {
   const [progress, setProgress] = useState<number>(0);
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<string | null>(null);
-  const [language, setLanguage] = useState<string>("eng");
+  const [language] = useState<string>("eng");
   const [worker, setWorker] = useState<any>(null);
   const [workerBusy, setWorkerBusy] = useState<boolean>(false);
-  const [workerInitialized, setWorkerInitialized] = useState<boolean>(false);
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+
+  const isDark = theme === "dark";
 
   useEffect(() => {
     const initializeWorker = async () => {
       try {
         const newWorker = await createWorker();
         await newWorker.load();
-        await newWorker.loadLanguage(language);
-        await newWorker.initialize(language);
-
-        // Set worker and initialize state
+        await newWorker.reinitialize(language);
+        await newWorker.reinitialize(language);
         setWorker(newWorker);
-        setWorkerInitialized(true);
       } catch (error) {
-        console.error("Error initializing worker:", error);
         notification.error({
           message: "OCR Error",
-          description: "Failed to initialize OCR worker. Please try again.",
+          description: "Failed to initialize OCR worker.",
         });
       }
     };
 
     initializeWorker();
+    return () => worker?.terminate?.();
+  }, [language, worker]);
 
-    return () => {
-      if (worker && typeof worker.terminate === "function") {
-        worker.terminate();
-      }
-    };
-  }, [language]);
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    handleImage(file);
+  };
 
-  const handleImageSelection = async (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    if (event.target.files && event.target.files[0]) {
-      const file = event.target.files[0];
-      const url = URL.createObjectURL(file);
-      setImage(url);
-      setLoading(true);
+  const handleImageSelection = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files?.[0]) handleImage(event.target.files[0]);
+  };
 
-      try {
-        if (!workerInitialized || workerBusy) {
-          throw new Error("Worker is not initialized or is busy");
+  const handleImage = (file: File) => {
+    const url = URL.createObjectURL(file);
+    setImage(url);
+    setLoading(true);
+
+    const img = new Image();
+    img.src = url;
+    img.onload = async () => {
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      canvas.width = img.width;
+      canvas.height = img.height;
+      ctx.drawImage(img, 0, 0);
+
+      canvas.toBlob(async (blob) => {
+        if (!blob || !worker || workerBusy) return;
+
+        try {
+          setWorkerBusy(true);
+          const { data } = await worker.recognize(blob);
+          const cleanText = data.text
+            .split("\n")
+            .filter((line: string) => line.trim());
+          setTextLines(cleanText);
+        } catch {
+          notification.error({
+            message: "OCR Error",
+            description: "Image processing failed.",
+          });
+        } finally {
+          setLoading(false);
+          setWorkerBusy(false);
+          setProgress(0);
         }
-
-        const img = new Image();
-        img.src = url;
-        img.onload = async () => {
-          const canvas = document.createElement("canvas");
-          const ctx = canvas.getContext("2d");
-          if (ctx) {
-            canvas.width = img.width;
-            canvas.height = img.height;
-            ctx.drawImage(img, 0, 0);
-
-            canvas.toBlob(async (blob) => {
-              if (!blob) {
-                throw new Error("Failed to create blob from canvas");
-              }
-
-              // Start OCR processing
-              setWorkerBusy(true);
-              const { data } = await worker.recognize(blob);
-              const cleanText = data.text
-                .split("\n")
-                .filter((line) => line.trim() !== "");
-              setTextLines(cleanText);
-            });
-          }
-        };
-      } catch (error) {
-        console.error("Image Processing Error:", error);
-        notification.error({
-          message: "OCR Error",
-          description: "Failed to process the image. Please try again.",
-        });
-      } finally {
-        setLoading(false);
-        setProgress(0);
-        setWorkerBusy(false); // Reset worker status when processing is finished
-      }
-    }
+      });
+    };
   };
 
   const exportToExcel = () => {
     const ws = XLSX.utils.json_to_sheet(textLines.map((line) => ({ line })));
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Text Data");
+    XLSX.utils.book_append_sheet(wb, ws, "Text");
     XLSX.writeFile(wb, "text_data.xlsx");
   };
 
   const exportToPDF = () => {
     const doc = new jsPDF();
-    textLines.forEach((line, index) => {
-      doc.text(line, 10, 10 + index * 10);
-    });
+    textLines.forEach((line, i) => doc.text(line, 10, 10 + i * 10));
     doc.save("text_data.pdf");
   };
 
@@ -126,122 +120,135 @@ const Home = () => {
     saveAs(blob, "text_data.doc");
   };
 
+  const exportMenu = (
+    <Menu
+      style={{
+        border: "2px solid #22c55e",
+        borderRadius: 8,
+        boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+      }}
+      items={[
+        {
+          key: "excel",
+          icon: <FileExcelOutlined className="text-green-600" />,
+          label: "Export to Excel",
+          onClick: exportToExcel,
+        },
+        {
+          key: "pdf",
+          icon: <FilePdfOutlined className="text-red-500" />,
+          label: "Export to PDF",
+          onClick: exportToPDF,
+        },
+        {
+          key: "word",
+          icon: <FileWordOutlined className="text-blue-500" />,
+          label: "Export to Word",
+          onClick: exportToWord,
+        },
+      ]}
+    />
+  );
+
   const handleTemplateSelect = (template: string, type: string) => {
     setSelectedTemplate(template);
     setSelectedType(type);
   };
 
+  const themeClass = isDark ? "bg-gray-900 text-white" : "bg-white text-black";
+
   return (
-    <>
-      <div className="flex flex-col lg:flex-row items-center lg:items-start p-6 bg-[#F4F7FA] min-h-screen">
-        <div className="flex flex-col w-full lg:w-1/2 items-center gap-6 p-8 bg-white rounded-lg shadow-lg">
-          <h2 className="text-3xl text-[#00796B] font-semibold">OCR Tool</h2>
-          <div className="relative w-full">
-            <label
-              htmlFor="image"
-              className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-[#00796B] rounded-lg cursor-pointer bg-[#E0F7FA] hover:bg-[#B2EBF2] transition duration-200 focus:outline-none"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth={2}
-                stroke="#00796B"
-                className="w-10 h-10 mb-2"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 16.5v-9m0 0l3 3m-3-3l-3 3m9 2.5v3.5a2.5 2.5 0 01-2.5 2.5h-11A2.5 2.5 0 013 19V7a2.5 2.5 0 012.5-2.5H9"
-                />
-              </svg>
-              <span className="text-sm text-[#004D40]">
-                Click to upload an image
-              </span>
-            </label>
+    <div className={`${themeClass} min-h-screen transition-colors`}>
+      <div className="flex justify-between items-center px-6 py-4 border-b border-gray-300 dark:border-gray-700">
+        <h1 className="text-3xl font-bold text-green-600">Dashboard</h1>
+        <div className="flex items-center gap-3">
+          <span>🌙</span>
+          <Switch
+            checked={isDark}
+            onChange={(v) => setTheme(v ? "dark" : "light")}
+          />
+          <span>☀️</span>
+        </div>
+      </div>
+
+      <div className="flex flex-col lg:flex-row gap-8 p-6">
+        <div
+          onDrop={handleDrop}
+          onDragOver={(e) => e.preventDefault()}
+          className={`w-full lg:w-1/2 p-6 rounded-lg border-2 border-dashed ${
+            isDark
+              ? "border-gray-600 bg-gray-800"
+              : "border-gray-300 bg-gray-50"
+          } text-center`}
+        >
+          <label htmlFor="image" className="cursor-pointer">
+            <div className="text-xl font-semibold mb-2">
+              Upload or Drag Image
+            </div>
             <input
               type="file"
-              name="ocr_image"
               id="image"
+              className="hidden"
               onChange={handleImageSelection}
-              className="absolute top-0 left-0 w-full h-full opacity-0 cursor-pointer"
             />
-          </div>
-          <Select
-            value={language}
-            onChange={setLanguage}
-            className="w-full rounded-md border border-[#00796B] bg-[#E0F7FA] focus:outline-none focus:ring-2 focus:ring-[#00796B]"
-            placeholder="Select Language"
-          >
-            <Option value="eng">English</Option>
-            <Option value="spa">Spanish</Option>
-            <Option value="fra">French</Option>
-          </Select>
-          {loading ? (
-            <Spin size="large" tip={`Processing... ${progress}%`} />
-          ) : (
-            image && (
-              <img
-                src={image}
-                alt="Preview"
-                className="w-full h-auto rounded-lg shadow-sm"
-              />
-            )
+            <p className="text-sm text-gray-500">
+              PNG, JPG — Click or Drag to upload
+            </p>
+          </label>
+
+          {loading && (
+            <div className="mt-4">
+              <Spin size="large" tip={`Processing... ${progress}%`} />
+            </div>
+          )}
+          {!loading && image && (
+            <img
+              src={image}
+              alt="Preview"
+              className="mt-4 w-full rounded-lg shadow-md object-contain"
+            />
           )}
         </div>
 
-        <div className="flex flex-col w-full lg:w-1/2 p-8 bg-white rounded-lg shadow-lg mt-6 lg:mt-0">
-          <h3 className="text-[#00796B] text-2xl font-semibold mb-4">
-            Extracted Text from the Image
-          </h3>
-          <div className="text-[#004D40] text-sm mb-6">
+        <div className="w-full lg:w-1/2 p-6 rounded-lg border bg-white dark:bg-gray-800 shadow-md">
+          <h2 className="text-2xl font-semibold mb-4 text-green-600">
+            Extracted Text
+          </h2>
+          <div className="max-h-64 overflow-y-auto bg-gray-100 dark:bg-gray-700 p-4 rounded shadow-inner">
             {textLines.length > 0 ? (
-              textLines.map((line, index) => (
-                <div key={index} className="py-1">
+              textLines.map((line, i) => (
+                <p
+                  key={i}
+                  className="text-sm text-gray-800 dark:text-gray-200 mb-1"
+                >
                   {line}
-                </div>
+                </p>
               ))
             ) : (
-              <p className="text-gray-500">No text extracted yet.</p>
+              <p className="italic text-gray-500">No text extracted yet.</p>
             )}
           </div>
 
-          <div className="flex gap-6 mb-6">
-            <button
-              onClick={exportToExcel}
-              className="bg-[#00796B] text-white py-2 px-4 rounded-lg hover:bg-[#00695C] transition duration-200 focus:outline-none focus:ring-2 focus:ring-[#004D40]"
-            >
-              Export to Excel
-            </button>
-            <button
-              onClick={exportToPDF}
-              className="bg-[#00796B] text-white py-2 px-4 rounded-lg hover:bg-[#00695C] transition duration-200 focus:outline-none focus:ring-2 focus:ring-[#004D40]"
-            >
-              Export to PDF
-            </button>
-            <button
-              onClick={exportToWord}
-              className="bg-[#00796B] text-white py-2 px-4 rounded-lg hover:bg-[#00695C] transition duration-200 focus:outline-none focus:ring-2 focus:ring-[#004D40]"
-            >
-              Export to Word
-            </button>
+          <div className="my-4">
+            <Dropdown overlay={exportMenu}>
+              <button className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded shadow inline-flex items-center gap-2 transition">
+                <DownloadOutlined /> Export Options
+              </button>
+            </Dropdown>
           </div>
 
-          <div className="mb-6 w-full">
-            <label className="block text-sm font-semibold text-[#00796B]">
+          <div className="mb-4">
+            <label className="block text-sm font-semibold mb-2">
               Select Template
             </label>
             <select
               onChange={(e) => {
-                const value = e.target.value;
-                const [type, template] = value.split("-");
+                const [type, template] = e.target.value.split("-");
                 handleTemplateSelect(template, type);
               }}
-              className="mt-2 block w-full border border-[#00796B] text-[#004D40] bg-[#E0F7FA] rounded-md p-2"
+              className="w-full p-2 rounded border-2 border-green-500 bg-white dark:bg-gray-700 text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500"
             >
-              <option value="" disabled selected>
-                Choose Template
-              </option>
+              <option value="">Choose Template</option>
               <option value="excel-template1">Excel Template 1</option>
               <option value="excel-template2">Excel Template 2</option>
               <option value="pdf-pdfTemplate1">PDF Template 1</option>
@@ -251,12 +258,16 @@ const Home = () => {
             </select>
           </div>
 
-          <div>
-            {selectedTemplate && selectedType ? (
-              <div>
-                <h4 className="text-xl font-semibold text-[#00796B] mb-4">
-                  Selected Template Preview
-                </h4>
+          <AnimatePresence>
+            {selectedTemplate && selectedType && (
+              <motion.div
+                key={selectedTemplate}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.4 }}
+              >
+                <h3 className="text-xl font-semibold mb-3">Template Preview</h3>
                 {selectedType === "excel" &&
                   selectedTemplate === "template1" && (
                     <ExcelTemplate1 data={textLines} />
@@ -267,11 +278,11 @@ const Home = () => {
                   )}
                 {selectedType === "pdf" &&
                   selectedTemplate === "pdfTemplate1" && (
-                    <PDFTemplate1 data={textLines} />
+                    <PDFTemplate1 text={textLines} />
                   )}
                 {selectedType === "pdf" &&
                   selectedTemplate === "pdfTemplate2" && (
-                    <PDFTemplate2 data={textLines} />
+                    <PDFTemplate2 text={textLines} />
                   )}
                 {selectedType === "word" &&
                   selectedTemplate === "wordTemplate1" && (
@@ -281,16 +292,12 @@ const Home = () => {
                   selectedTemplate === "wordTemplate2" && (
                     <WordTemplate2 data={textLines} />
                   )}
-              </div>
-            ) : (
-              <p className="text-gray-500">
-                Select a template to see a preview.
-              </p>
+              </motion.div>
             )}
-          </div>
+          </AnimatePresence>
         </div>
       </div>
-    </>
+    </div>
   );
 };
 

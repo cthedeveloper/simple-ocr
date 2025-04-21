@@ -2,7 +2,7 @@ import nlp from "compromise";
 import { syllable } from "syllable";
 
 // Filters out non-English characters and returns cleaned text
-export const cleanText = (text) => {
+export const cleanText = (text: string | string[]): string => {
   if (typeof text !== "string" && !Array.isArray(text)) {
     console.error("Invalid input: Expected a string or an array of strings.");
     return "";
@@ -15,71 +15,97 @@ export const cleanText = (text) => {
 };
 
 // Checks if the text is meaningful using NLP
-export const validateTextWithNLP = (text) => {
-  const cleanedText = cleanText(text);
+interface ValidateTextWithNLPResult {
+  hasSentences: boolean;
+  hasVerbs: boolean;
+  isTooShort: boolean;
+}
+
+export const validateTextWithNLP = (text: string | string[]): boolean => {
+  const cleanedText: string = cleanText(text);
   if (!cleanedText) return false;
 
   const doc = nlp(cleanedText);
 
   // Check if the text has sentences and verbs
-  const hasSentences = doc.sentences().length > 0;
-  const hasVerbs = doc.verbs().length > 0;
-  const isTooShort = cleanedText.split(" ").length < 5;
+  const hasSentences: boolean = doc.sentences().length > 0;
+  const hasVerbs: boolean = doc.verbs().length > 0;
+  const isTooShort: boolean = cleanedText.split(" ").length < 5;
 
-  console.log({ hasSentences, hasVerbs, isTooShort });
+  const result: ValidateTextWithNLPResult = {
+    hasSentences,
+    hasVerbs,
+    isTooShort,
+  };
+  console.log(result);
   return hasSentences && hasVerbs && !isTooShort;
 };
 
 // Detects the language of the text (basic English check)
-export const detectLanguage = (text) => {
-  const cleanedText = cleanText(text);
+interface DetectLanguageResult {
+  words: string[];
+  englishWords: string[];
+  englishRatio: number;
+}
+
+export const detectLanguage = (text: string | string[]): string => {
+  const cleanedText: string = cleanText(text);
   if (!cleanedText) return "Unknown";
 
-  const words = cleanedText.split(/\s+/);
+  const words: string[] = cleanedText.split(/\s+/);
 
   // Count nouns as a simple check for English text
-  const englishWords = words.filter((word) => nlp(word).has("#Noun"));
-  const englishRatio =
+  const englishWords: string[] = words.filter((word) => nlp(word).has("#Noun"));
+  const englishRatio: number =
     words.length > 0 ? englishWords.length / words.length : 0;
 
-  console.log({ words, englishWords, englishRatio });
+  const result: DetectLanguageResult = { words, englishWords, englishRatio };
+  console.log(result);
   return englishRatio > 0.7 ? "English" : "Non-English";
 };
 
 // Checks for redundancy in the text
-export const checkRedundancy = (text) => {
-  const cleanedText = cleanText(text);
+interface CheckRedundancyResult {
+  sentences: string[];
+  uniqueSentences: Set<string>;
+}
+
+export const checkRedundancy = (text: string | string[]): boolean => {
+  const cleanedText: string = cleanText(text);
   if (!cleanedText) return false;
 
-  const sentences = nlp(cleanedText).sentences().out("array");
-  const uniqueSentences = new Set(sentences);
+  const sentences: string[] = nlp(cleanedText).sentences().out("array");
+  const uniqueSentences: Set<string> = new Set(sentences);
 
-  console.log({ sentences, uniqueSentences });
+  const result: CheckRedundancyResult = { sentences, uniqueSentences };
+  console.log(result);
   return uniqueSentences.size !== sentences.length;
 };
 
 // Calculates the Flesch–Kincaid readability score
-export const calculateReadability = (text) => {
-  const cleanedText = cleanText(text);
+export const calculateReadability = (
+  text: string | string[]
+): number | string => {
+  const cleanedText: string = cleanText(text);
 
   if (cleanedText.split(" ").length < 5) {
     return "Text is too short to calculate readability.";
   }
 
   // Split into sentences and words
-  const sentences = cleanedText.split(/[.!?]/).filter(Boolean);
-  const words = cleanedText.split(/\s+/).filter(Boolean);
+  const sentences: string[] = cleanedText.split(/[.!?]/).filter(Boolean);
+  const words: string[] = cleanedText.split(/\s+/).filter(Boolean);
 
-  let syllableCount = 0;
+  let syllableCount: number = 0;
 
   // Count syllables for each word
-  words.forEach((word) => {
+  words.forEach((word: string) => {
     syllableCount += syllable(word); // Use syllable to count syllables
   });
 
-  const avgWordsPerSentence =
+  const avgWordsPerSentence: number =
     sentences.length > 0 ? words.length / sentences.length : 1;
-  const avgSyllablesPerWord =
+  const avgSyllablesPerWord: number =
     words.length > 0 ? syllableCount / words.length : 1;
 
   // Calculate Flesch–Kincaid readability score
@@ -87,9 +113,14 @@ export const calculateReadability = (text) => {
 };
 
 // Suggest improvements to the text
-export const suggestImprovements = (text) => {
-  const readabilityScore = calculateReadability(text);
-  const improvements = [];
+interface SuggestImprovementsResult {
+  readabilityScore: number | string;
+  improvements: string[];
+}
+
+export const suggestImprovements = (text: string | string[]): string[] => {
+  const readabilityScore: number | string = calculateReadability(text);
+  const improvements: string[] = [];
 
   // Suggest improvements based on readability
   if (typeof readabilityScore === "number" && readabilityScore < 60) {
@@ -102,6 +133,7 @@ export const suggestImprovements = (text) => {
     improvements.push("Ensure the text is in English for better analysis.");
   }
 
-  console.log({ readabilityScore, improvements });
+  const result: SuggestImprovementsResult = { readabilityScore, improvements };
+  console.log(result);
   return improvements;
 };
